@@ -9,28 +9,20 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol";
 contract FlipCoin is ERC20Capped, ERC20Burnable {
 
     address public owner;
+    uint256 public _userId;
+    uint256 public constant EXPIRY_DURATION = 180 days;
+    uint256 public constant DECAY_PERCENTAGE = 10;
+
     struct User {
         string name;
         string email;
         uint256 balance;
     }
-
     struct Seller {
         string storeName;
         string storeAddress;
         uint256 balance;
     }
-    mapping(address => User) public users;
-    mapping(address => Seller) public sellers;
-    mapping(address => uint256) public lastActiveTime;
-    mapping(address => Transaction[]) public userTransactions;
-
-    // Constants for FlipCoin
-    uint256 public constant EXPIRY_DURATION = 180 days;
-    uint256 public constant DECAY_PERCENTAGE = 10;
-  
-    enum TransactionType { Mint, Burn, Transfer }
-
     struct Transaction {
         string transactionType;
         address from;
@@ -38,10 +30,25 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
         uint256 amount;
         uint256 timestamp;
     }
+    struct TokenHolderInfo{
+        uint256 _tokenId;
+        address _from;
+        address _to;
+        uint256 _totalToken; 
+        bool _tokenHolder;
+    }
+    mapping(address => User) public users;
+    mapping(address => Seller) public sellers;
+    mapping(address => uint256) public lastActiveTime;
+    mapping(address => Transaction[]) public userTransactions;
+    mapping(address => TokenHolderInfo) public tokenHolderInfos;
+    mapping(address => uint256) public balance;
 
-
+    enum TransactionType { Mint, Burn, Transfer }
+    event NewTransaction(string indexed transactionType, address indexed from, address indexed to, uint256 amount, uint256 timestamp);
     constructor(uint256 initialAmount, uint256 cap) ERC20("FlipCoin", "FLC") ERC20Capped(cap*(10**decimals())){
         owner=msg.sender;
+        balance[msg.sender]=initialAmount;
         _mint(owner,initialAmount*(10**decimals()));
     }
 
@@ -54,36 +61,47 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
     }
 
     function transferFromSellerToUser(address seller, address user, uint256 amount) public {
-    // Ensure the function caller is the seller
-    require(msg.sender == seller, "Only the seller can initiate the transfer");
-    
-    // Ensure the seller exists
-    require(_sellerExists(seller), "Seller does not exist");
-    
-    // Ensure the user exists
-    require(_userExists(user), "User does not exist");
+        // Ensure the function caller is the seller
+        require(msg.sender == seller, "Only the seller can initiate the transfer");
+        
+        // Ensure the seller exists
+        require(_sellerExists(seller), "Seller does not exist");
+        
+        // Ensure the user exists
+        require(_userExists(user), "User does not exist");
 
-    // Use the ERC20 transfer function to transfer tokens from the seller to the user
-    require(transferFrom(seller, user, amount), "Transfer failed");
+        // Use the ERC20 transfer function to transfer tokens from the seller to the user
+        require(transferFrom(seller, user, amount), "Transfer failed");
 
-    // Log the transaction for the seller
-    userTransactions[seller].push(Transaction({
-        transactionType: "debit",
-        from: seller,
-        to: user,
-        amount: amount,
-        timestamp: block.timestamp
-    }));
+        // Log the transaction for the seller
+        userTransactions[seller].push(Transaction({
+            transactionType: "debit",
+            from: seller,
+            to: user,
+            amount: amount,
+            timestamp: block.timestamp
+        }));
 
-    // Log the transaction for the user
-    userTransactions[user].push(Transaction({
-        transactionType: "credit",
-        from: seller,
-        to: user,
-        amount: amount,
-        timestamp: block.timestamp
-    }));
-}
+        // Log the transaction for the user
+        userTransactions[user].push(Transaction({
+            transactionType: "credit",
+            from: seller,
+            to: user,
+            amount: amount,
+            timestamp: block.timestamp
+        }));
+        emit NewTransaction("debit", seller, user, amount, block.timestamp);
+        emit NewTransaction("credit", user, seller, amount, block.timestamp);
+    }
+    function getTransactionCount(address user) public view returns (uint256) {
+        return userTransactions[user].length;
+    }
+    function getTransaction(address user, uint256 index) public view returns (string memory, address, address, uint256, uint256) {
+        require(index < userTransactions[user].length, "Invalid index");
+        Transaction memory txn = userTransactions[user][index];
+        return (txn.transactionType, txn.from, txn.to, txn.amount, txn.timestamp);
+    }
+
 
     function _userExists(address _userAddress) public view returns (bool) {
         return bytes(users[_userAddress].name).length > 0;
@@ -118,6 +136,7 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
     }
     function _mintTo(address _address, uint256 amount) public {
         _mint(_address, amount*(10**decimals()));
+        emit NewTransaction("credit", msg.sender, _address, amount, block.timestamp);
     }
     function _mint(address account, uint256 amount) internal override(ERC20, ERC20Capped) {
         super._mint(account, amount);
@@ -135,10 +154,12 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
 
     function _customerReward(uint256 _amount, address _customerAddress) public{
         _mint(_customerAddress, _amount*(10**decimals()));
+        emit NewTransaction("credit", msg.sender, _customerAddress, _amount, block.timestamp);
     }
 
     function _sellerReward(uint256 _amount, address _sellerAddress) public{
         _mint(_sellerAddress, _amount*(10**decimals()));
+        emit NewTransaction("credit", msg.sender, _sellerAddress, _amount, block.timestamp);
     }
 
    function _burnToken(address _address,uint256 amount) public{
