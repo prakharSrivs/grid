@@ -49,7 +49,14 @@ contract FlipCoin is ERC20Burnable {
     constructor(uint256 initialAmount) ERC20("FlipCoin", "FLC"){
         owner=msg.sender;
         balance[msg.sender]=initialAmount;
-        _mint(owner,initialAmount*(10**decimals()));
+        _mint(owner,initialAmount);
+        userTransactions[msg.sender].push(Transaction({
+            transactionType: "credit",
+            from: address(0),
+            to: msg.sender,
+            amount: initialAmount,
+            timestamp: block.timestamp
+        }));
     }
 
     function _returnOwner() public view returns(address){
@@ -57,7 +64,7 @@ contract FlipCoin is ERC20Burnable {
     }
     
     function _getBalance(address _address) public view returns(uint){ 
-        return balanceOf(_address)/10**decimals();
+        return balanceOf(_address);
     }
 
     function transferFromSellerToUser(address seller, address user, uint256 amount) public {
@@ -93,12 +100,33 @@ contract FlipCoin is ERC20Burnable {
     function getTransactionCount(address user) public view returns (uint256) {
         return userTransactions[user].length;
     }
-    function getTransaction(address user, uint256 index) public view returns (string memory, address, address, uint256, uint256) {
-        require(index < userTransactions[user].length, "Invalid index");
-        Transaction memory txn = userTransactions[user][index];
-        return (txn.transactionType, txn.from, txn.to, txn.amount, txn.timestamp);
-    }
+    function getAllTransactions(address user) 
+        public view 
+        returns (
+            string[] memory transactionTypes, 
+            address[] memory fromAddresses, 
+            address[] memory toAddresses, 
+            uint256[] memory amounts, 
+            uint256[] memory timestamps
+        ) 
+    {
+        uint256 length = userTransactions[user].length;
 
+        transactionTypes = new string[](length);
+        fromAddresses = new address[](length);
+        toAddresses = new address[](length);
+        amounts = new uint256[](length);
+        timestamps = new uint256[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            Transaction memory txn = userTransactions[user][i];
+            transactionTypes[i] = txn.transactionType;
+            fromAddresses[i] = txn.from;
+            toAddresses[i] = txn.to;
+            amounts[i] = txn.amount;
+            timestamps[i] = txn.timestamp;
+        }
+    }
 
     function _userExists(address _userAddress) public view returns (bool) {
         return bytes(users[_userAddress].name).length > 0;
@@ -132,36 +160,42 @@ contract FlipCoin is ERC20Burnable {
         return bytes(sellers[_sellerAddress].storeName).length > 0;
     }
     function _mintTo(address _address, uint256 amount) public {
-        _mint(_address, amount*(10**decimals()));
+        _mint(_address, amount);
         emit NewTransaction("credit", msg.sender, _address, amount, block.timestamp);
+        userTransactions[_address].push(Transaction({
+            transactionType: "credit",
+            from: address(0),
+            to: _address,
+            amount: amount,
+            timestamp: block.timestamp
+        }));
     }
     function _mint(address account, uint256 amount) internal override {
         super._mint(account, amount);
         lastActiveTime[account]=block.timestamp;
 
-        userTransactions[account].push(Transaction({
-            transactionType: "credit",
-            from: msg.sender,
-            to: account,
-            amount: amount,
-            timestamp: block.timestamp
-        }));
-
     }
 
     function _customerReward(uint256 _amount, address _customerAddress) public{
-        _mint(_customerAddress, _amount*(10**decimals()));
+        _mint(_customerAddress, _amount);
         emit NewTransaction("credit", msg.sender, _customerAddress, _amount, block.timestamp);
     }
 
     function _sellerReward(uint256 _amount, address _sellerAddress) public{
-        _mint(_sellerAddress, _amount*(10**decimals()));
+        _mint(_sellerAddress, _amount);
         emit NewTransaction("credit", msg.sender, _sellerAddress, _amount, block.timestamp);
     }
 
-   function _burnToken(address _address,uint256 amount) public{
-       require(amount*(10**decimals())<balanceOf(_address), "Burn amount exceeds balance");
-       _burn(_address, amount*(10**decimals()));
+   function _burnToken(address _address, uint256 amount) public{
+       _burn(_address, amount);
+
+       userTransactions[_address].push(Transaction({
+        transactionType: "debit", 
+        from: _address, 
+        to: address(0), 
+        amount: amount, 
+        timestamp: block.timestamp
+       }));
    }
 
     function decay(address user) external {

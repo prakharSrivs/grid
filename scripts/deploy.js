@@ -7,7 +7,7 @@
 const hre = require("hardhat");
 
 async function main() {
-  const flipCoin = await hre.ethers.deployContract("FlipCoin",[100,1000]);
+  const flipCoin = await hre.ethers.deployContract("FlipCoin",[hre.ethers.parseEther("1000")]);
   await flipCoin.waitForDeployment();
   const [owner,customer]=await hre.ethers.getSigners();
   console.log("FileCoin deployed to ",owner.address);
