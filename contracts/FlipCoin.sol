@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol"; 
 
-contract FlipCoin is ERC20Capped, ERC20Burnable {
+contract FlipCoin is ERC20Burnable {
 
     address public owner;
     uint256 public _userId;
@@ -46,7 +46,7 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
 
     enum TransactionType { Mint, Burn, Transfer }
     event NewTransaction(string indexed transactionType, address indexed from, address indexed to, uint256 amount, uint256 timestamp);
-    constructor(uint256 initialAmount, uint256 cap) ERC20("FlipCoin", "FLC") ERC20Capped(cap*(10**decimals())){
+    constructor(uint256 initialAmount) ERC20("FlipCoin", "FLC"){
         owner=msg.sender;
         balance[msg.sender]=initialAmount;
         _mint(owner,initialAmount*(10**decimals()));
@@ -63,15 +63,12 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
     function transferFromSellerToUser(address seller, address user, uint256 amount) public {
         // Ensure the function caller is the seller
         require(msg.sender == seller, "Only the seller can initiate the transfer");
-        
         // Ensure the seller exists
         require(_sellerExists(seller), "Seller does not exist");
-        
         // Ensure the user exists
         require(_userExists(user), "User does not exist");
-
         // Use the ERC20 transfer function to transfer tokens from the seller to the user
-        require(transferFrom(seller, user, amount), "Transfer failed");
+        require(transferFrom(seller, user, amount*(10**decimals())), "Transfer failed");
 
         // Log the transaction for the seller
         userTransactions[seller].push(Transaction({
@@ -138,7 +135,7 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
         _mint(_address, amount*(10**decimals()));
         emit NewTransaction("credit", msg.sender, _address, amount, block.timestamp);
     }
-    function _mint(address account, uint256 amount) internal override(ERC20, ERC20Capped) {
+    function _mint(address account, uint256 amount) internal override {
         super._mint(account, amount);
         lastActiveTime[account]=block.timestamp;
 
@@ -163,8 +160,8 @@ contract FlipCoin is ERC20Capped, ERC20Burnable {
     }
 
    function _burnToken(address _address,uint256 amount) public{
-       require(amount<balanceOf(_address), "Burn amount exceeds balance");
-       _burn(_address, amount);
+       require(amount*(10**decimals())<balanceOf(_address), "Burn amount exceeds balance");
+       _burn(_address, amount*(10**decimals()));
    }
 
     function decay(address user) external {
